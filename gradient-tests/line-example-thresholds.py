@@ -82,12 +82,11 @@ imgplot = plt.imshow(image)
 plt.show(imgplot)
 
 # Apply each of the thresholding functions
-gradx = abs_sobel_thresh(image, orient='x', sobel_kernel=ksize, thresh=(20, 100))
-print (gradx)
-grady = abs_sobel_thresh(image, orient='y', sobel_kernel=ksize, thresh=(20, 100))
+gradx = abs_sobel_thresh(image, orient='x', sobel_kernel=ksize, thresh=(0, 255))
+grady = abs_sobel_thresh(image, orient='y', sobel_kernel=ksize, thresh=(0, 255))
 mag_binary = mag_thresh(image, sobel_kernel=ksize, mag_thresh=(0, 255))
 dir_binary = dir_threshold(image, sobel_kernel=ksize, thresh=(0, np.pi/2))
-
+print (dir_binary)
 
 combined = np.zeros_like(dir_binary)
 combined[((gradx == 1) & (grady == 1)) | ((mag_binary == 1) & (dir_binary == 1))] = 1
@@ -105,10 +104,11 @@ im = Image.fromarray(combined)
 im.convert('RGB').save("output-combined.png")
 
 ## Plot the result
-#f, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 9))
-#f.tight_layout()
-#ax1.imshow(image)
-#ax1.set_title('Original Image', fontsize=50)
-#ax2.imshow(dir_binary, cmap='gray')
-#ax2.set_title('Thresholded Grad. Dir.', fontsize=50)
-#plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
+f, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 9))
+f.tight_layout()
+ax1.imshow(image)
+ax1.set_title('Original Image', fontsize=50)
+ax2.imshow(dir_binary, cmap='gray')
+ax2.set_title('Thresholded Grad. Dir.', fontsize=50)
+plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
+plt.show()

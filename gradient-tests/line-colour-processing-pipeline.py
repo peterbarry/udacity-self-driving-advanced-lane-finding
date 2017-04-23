@@ -91,10 +91,11 @@ def pipeline_12(img, h_thresh=(50, 60), hx_thresh=(20,100),
     #color_binary = np.dstack(( r_combined_binary, h_binary, s_binary))
 
     color_binary = np.dstack(( np.zeros_like(r_combined_binary),r_combined_binary, s_combined_binary, ))
+    gray_binary = np.zeros_like(h_channel)
+    gray_binary[(r_combined_binary != 0 ) & (s_combined_binary != 0)] = 1
+    return color_binary,gray_binary
 
-    return color_binary
-
-result = pipeline_12(image)
+result,gray_result = pipeline_12(image)
 
 # Plot the result
 f, (ax1, ax2) = plt.subplots(1, 2, figsize=(48, 18))
@@ -103,6 +104,7 @@ f.tight_layout()
 ax1.imshow(image)
 ax1.set_title('Original Image', fontsize=40)
 
-ax2.imshow(result)
+# ax2.imshow(result)
+ax2.imshow(gray_result,cmap='gray')
 ax2.set_title('Pipeline Result', fontsize=40)
 plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
