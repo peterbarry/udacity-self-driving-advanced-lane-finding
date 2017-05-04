@@ -177,7 +177,7 @@ def line_detect(img, h_thresh=(50, 60), hx_thresh=(20,100),
 
 def first_fit_and_polyfit(binary_img):
 
-    out_img = np.copy(binary_img)
+    #out_img = np.copy(binary_img)
     #gray = img[:,:,0]
     #binary_warped = np.zeros_like(gray)
     #print(binary_warped.shape)
@@ -193,7 +193,7 @@ def first_fit_and_polyfit(binary_img):
     histogram = np.sum(binary_warped[binary_warped.shape[0]//2:,:], axis=0)
 
     # Create an output image to draw on and  visualize the result
-    #out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
+    out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
     # Find the peak of the left and right halves of the histogram
     # These will be the starting point for the left and right lines
     midpoint = np.int(histogram.shape[0]//2)
@@ -329,7 +329,7 @@ def pipeline_test():
         cv2.imwrite(output_imagename,colour_binary)
 
 
-        found_left, left_fit,foundr_right, right_fit,out_img = first_fit_and_polyfit(gray_binary_3)
+        found_left, left_fit,foundr_right, right_fit,out_img = first_fit_and_polyfit(gray_binary)
 
 
         output_imagename = 'output_images/pipeline-'+fname
