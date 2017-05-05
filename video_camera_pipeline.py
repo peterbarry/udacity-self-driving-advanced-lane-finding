@@ -433,20 +433,20 @@ def subsequent_fit_and_polyfit(binary_img,left_fit,right_fit):
         #print(y_eval)
     left_curverad = ((1 + (2*left_fit[0]*y_eval + left_fit[1])**2)**1.5) / np.absolute(2*left_fit[0])
     right_curverad = ((1 + (2*right_fit[0]*y_eval + right_fit[1])**2)**1.5) / np.absolute(2*right_fit[0])
-        #print(left_curverad, right_curverad)
+    print(left_curverad, right_curverad)
 
         # Define conversions in x and y from pixels space to meters
-        #ym_per_pix = 30/720 # meters per pixel in y dimension
-        #xm_per_pix = 3.7/700 # meters per pixel in x dimension
+    ym_per_pix = 30/720 # meters per pixel in y dimension
+    xm_per_pix = 3.7/700 # meters per pixel in x dimension
 
         # Fit new polynomials to x,y in world space
-        #left_fit_cr = np.polyfit(ploty*ym_per_pix, leftx*xm_per_pix, 2)
-        #right_fit_cr = np.polyfit(ploty*ym_per_pix, rightx*xm_per_pix, 2)
+    left_fit_cr = np.polyfit(lefty*ym_per_pix, leftx*xm_per_pix, 2)
+    right_fit_cr = np.polyfit(righty*ym_per_pix, rightx*xm_per_pix, 2)
         # Calculate the new radii of curvature
-        #left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
-        #right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
+    left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
+    right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
         # Now our radius of curvature is in meters
-        #print(left_curverad, 'm', right_curverad, 'm')
+    print(left_curverad, 'm', right_curverad, 'm')
 
 
     # Generate x and y values for plotting
@@ -537,12 +537,12 @@ def process_img(img):
             #result = img
 
             font = cv2.FONT_HERSHEY_SIMPLEX
-            left_roc_text = "Roc: {0:.2f} pixels".format(left_curverad)
+            left_roc_text = "Roc: {0:.2f} m".format(left_curverad)
             cv2.putText(result, left_roc_text, (20,650), font, 1, (255,255,255), 2)
-            right_roc_text = "Roc: {0:.2f} pixels".format(right_curverad)
+            right_roc_text = "Roc: {0:.2f} m".format(right_curverad)
             cv2.putText(result, right_roc_text, (1000,650), font, 1, (255,255,255), 2)
 
-            frame_counter_str = "Frame #: {0:2d} pixels".format(lane_history.get_frame_counter())
+            frame_counter_str = "Frame #: {0:2d} ".format(lane_history.get_frame_counter())
             cv2.putText(result, frame_counter_str, (1000,350), font, 1, (255,0,0), 2)
 
             #output_imagename = 'output_images/unwarped-lanes-'+fname
