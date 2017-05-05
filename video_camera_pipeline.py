@@ -19,15 +19,32 @@ mtx = dist_pickle["mtx"]
 dist = dist_pickle["dist"]
 
 class LanesHistory:
+
+
+
     def __init__(self, debug_mode=False, show_plots=False):
         # Frame counter (used for finding new lanes)
         self.frame_number = 0
+        self.left_fit=[0.0,0.0,0.0]
+        self.right_fit=[0.0,0.0,0.0]
+
 
     def inc_frame_counter(self):
         self.frame_number += 1
 
     def get_frame_counter(self):
         return self.frame_number
+
+    def set_left_fit(self,fit):
+        self.left_fit = fit
+    def set_right_fit(self,fit):
+        self.right_fit = fit
+
+    def get_left_fit(self):
+        return self.left_fit
+
+    def get_right_fit(self):
+        return self.right_fit
 
 lane_history = LanesHistory()
 
@@ -269,7 +286,7 @@ def first_fit_and_polyfit(binary_img):
         win_xright_high = rightx_current + margin
         # Draw the windows on the visualization image
 
-        #cv2.rectangle crashing
+        #cv2.rectangle
         cv2.rectangle(out_img,(win_xleft_low,win_y_low),(win_xleft_high,win_y_high),(0,255,0),2)
         cv2.rectangle(out_img,(win_xright_low,win_y_low),(win_xright_high,win_y_high),(0,255,0),2)
         # Identify the nonzero pixels in x and y within the window
@@ -381,8 +398,93 @@ def first_fit_and_polyfit(binary_img):
 
     result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
 
-    return found_left, left_fit,found_right, right_fit,result,window_img,left_curverad, right_curverad
+    return  left_fit,right_fit,result,window_img,left_curverad, right_curverad
 
+def subsequent_fit_and_polyfit(binary_img,left_fit,right_fit):
+
+    binary_warped=binary_img
+
+    # Create an output image to draw on and  visualize the result
+    out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
+
+
+    # Assume you now have a new warped binary image
+    # from the next frame of video (also called "binary_warped")
+    # It's now much easier to find line pixels!
+    nonzero = binary_warped.nonzero()
+    nonzeroy = np.array(nonzero[0])
+    nonzerox = np.array(nonzero[1])
+    margin = 100
+    left_lane_inds = ((nonzerox > (left_fit[0]*(nonzeroy**2) + left_fit[1]*nonzeroy + left_fit[2] - margin)) & (nonzerox < (left_fit[0]*(nonzeroy**2) + left_fit[1]*nonzeroy + left_fit[2] + margin)))
+    right_lane_inds = ((nonzerox > (right_fit[0]*(nonzeroy**2) + right_fit[1]*nonzeroy + right_fit[2] - margin)) & (nonzerox < (right_fit[0]*(nonzeroy**2) + right_fit[1]*nonzeroy + right_fit[2] + margin)))
+
+    # Again, extract left and right line pixel positions
+    leftx = nonzerox[left_lane_inds]
+    lefty = nonzeroy[left_lane_inds]
+    rightx = nonzerox[right_lane_inds]
+    righty = nonzeroy[right_lane_inds]
+    # Fit a second order polynomial to each
+    left_fit = np.polyfit(lefty, leftx, 2)
+    right_fit = np.polyfit(righty, rightx, 2)
+
+
+        # Calculate curvature
+    y_eval = np.max(nonzeroy)
+        #print(y_eval)
+    left_curverad = ((1 + (2*left_fit[0]*y_eval + left_fit[1])**2)**1.5) / np.absolute(2*left_fit[0])
+    right_curverad = ((1 + (2*right_fit[0]*y_eval + right_fit[1])**2)**1.5) / np.absolute(2*right_fit[0])
+        #print(left_curverad, right_curverad)
+
+        # Define conversions in x and y from pixels space to meters
+        #ym_per_pix = 30/720 # meters per pixel in y dimension
+        #xm_per_pix = 3.7/700 # meters per pixel in x dimension
+
+        # Fit new polynomials to x,y in world space
+        #left_fit_cr = np.polyfit(ploty*ym_per_pix, leftx*xm_per_pix, 2)
+        #right_fit_cr = np.polyfit(ploty*ym_per_pix, rightx*xm_per_pix, 2)
+        # Calculate the new radii of curvature
+        #left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
+        #right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
+        # Now our radius of curvature is in meters
+        #print(left_curverad, 'm', right_curverad, 'm')
+
+
+    # Generate x and y values for plotting
+    ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
+    left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
+    right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+
+    out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
+    out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
+
+    window_img = np.zeros_like(out_img)
+    # Color in left and right line pixels
+
+
+    # Generate a polygon to illustrate the search window area
+    # And recast the x and y points into usable format for cv2.fillPoly()
+    margin = 10
+    left_line_window1 = np.array([np.transpose(np.vstack([left_fitx-margin, ploty]))])
+    left_line_window2 = np.array([np.flipud(np.transpose(np.vstack([left_fitx+margin, ploty])))])
+    left_line_pts = np.hstack((left_line_window1, left_line_window2))
+    right_line_window1 = np.array([np.transpose(np.vstack([right_fitx-margin, ploty]))])
+    right_line_window2 = np.array([np.flipud(np.transpose(np.vstack([right_fitx+margin, ploty])))])
+    right_line_pts = np.hstack((right_line_window1, right_line_window2))
+
+    # Draw the lane onto the warped blank image
+    cv2.fillPoly(window_img, np.int_([left_line_pts]), (255,0, 0))
+    cv2.fillPoly(window_img, np.int_([right_line_pts]), (255,0, 0))
+
+
+    #fill in the road surface space
+    infill_area_pts = np.hstack((left_line_window2, right_line_window1))
+    cv2.fillPoly(window_img, np.int_([infill_area_pts]), (0,255, 0))
+
+
+    result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
+
+
+    return left_fit ,right_fit,result,window_img,left_curverad, right_curverad
 
 def process_img(img):
 
@@ -405,13 +507,20 @@ def process_img(img):
             #cv2.imwrite(output_imagename,colour_binary)
 
             #add line detection overlay
-            colour_binary_unwarped = cv2.warpPerspective(colour_binary, Minv, (colour_binary.shape[1], colour_binary.shape[0]))
-            img = cv2.addWeighted(img, 1, colour_binary_unwarped, 0.7, 0)
+            #colour_binary_unwarped = cv2.warpPerspective(colour_binary, Minv, (colour_binary.shape[1], colour_binary.shape[0]))
+            #img = cv2.addWeighted(img, 1, colour_binary_unwarped, 0.7, 0)
 
 
-
-            found_left, left_fit,foundr_right, right_fit,out_img,warped_lanes,left_curverad, right_curverad = first_fit_and_polyfit(gray_binary)
-
+            if lane_history.get_frame_counter() == 1 :
+                left_fit,right_fit,out_img,warped_lanes,left_curverad, right_curverad = first_fit_and_polyfit(gray_binary)
+                lane_history.set_left_fit(left_fit)
+                lane_history.set_right_fit(right_fit)
+            else:
+                left_fit = lane_history.get_left_fit()
+                right_fit = lane_history.get_right_fit()
+                left_fit,right_fit,out_img,warped_lanes,left_curverad, right_curverad = subsequent_fit_and_polyfit(gray_binary,left_fit,right_fit)
+                lane_history.set_left_fit(left_fit)
+                lane_history.set_right_fit(right_fit)
 
 
             #output_imagename = 'output_images/histogram-first-pass-'+fname
@@ -451,8 +560,8 @@ def video_pipeline(input_filename,output_filename):
 
 def video_pipeline_test():
     video_pipeline('project_video.mp4','project_video-lines-output.mp4')
-    #video_pipeline('challenge_video.mp4','challenge_video-lines-output.mp4')
-    #video_pipeline('harder_challenge_video.mp4','harder_challenge_video-lines-output.mp4')
+    video_pipeline('challenge_video.mp4','challenge_video-lines-output.mp4')
+    video_pipeline('harder_challenge_video.mp4','harder_challenge_video-lines-output.mp4')
 
 
 
