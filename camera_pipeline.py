@@ -322,8 +322,15 @@ def first_fit_and_polyfit(binary_img):
     right_line_pts = np.hstack((right_line_window1, right_line_window2))
 
     # Draw the lane onto the warped blank image
-    cv2.fillPoly(window_img, np.int_([left_line_pts]), (0,255, 0))
-    cv2.fillPoly(window_img, np.int_([right_line_pts]), (0,255, 0))
+    cv2.fillPoly(window_img, np.int_([left_line_pts]), (255,0, 0))
+    cv2.fillPoly(window_img, np.int_([right_line_pts]), (255,0, 0))
+
+
+    #fill in the road surface space
+    infill_area_pts = np.hstack((left_line_window2, right_line_window1))
+    cv2.fillPoly(window_img, np.int_([infill_area_pts]), (0,255, 0))
+
+
     result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
 
     return found_left, left_fit,found_right, right_fit,result,window_img
