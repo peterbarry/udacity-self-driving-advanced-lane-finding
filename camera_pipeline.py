@@ -70,9 +70,10 @@ def birdseye_image(img):
 
     # Given src and dst points, calculate the perspective transform matrix
     M = cv2.getPerspectiveTransform(src, dst)
+    Minv = cv2.getPerspectiveTransform(dst,src )
     # Warp the image using OpenCV warpPerspective()
     warped = cv2.warpPerspective(img, M, img_size)
-    return warped
+    return warped,M,Minv
 
 max_pixel_value=255
 
@@ -194,6 +195,8 @@ def first_fit_and_polyfit(binary_img):
 
     # Create an output image to draw on and  visualize the result
     out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
+
+
     # Find the peak of the left and right halves of the histogram
     # These will be the starting point for the left and right lines
     midpoint = np.int(histogram.shape[0]//2)
@@ -304,7 +307,26 @@ def first_fit_and_polyfit(binary_img):
     out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
     out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
 
-    return found_left, left_fit,found_right, right_fit,out_img
+    window_img = np.zeros_like(out_img)
+    # Color in left and right line pixels
+
+
+    # Generate a polygon to illustrate the search window area
+    # And recast the x and y points into usable format for cv2.fillPoly()
+    margin = 10
+    left_line_window1 = np.array([np.transpose(np.vstack([left_fitx-margin, ploty]))])
+    left_line_window2 = np.array([np.flipud(np.transpose(np.vstack([left_fitx+margin, ploty])))])
+    left_line_pts = np.hstack((left_line_window1, left_line_window2))
+    right_line_window1 = np.array([np.transpose(np.vstack([right_fitx-margin, ploty]))])
+    right_line_window2 = np.array([np.flipud(np.transpose(np.vstack([right_fitx+margin, ploty])))])
+    right_line_pts = np.hstack((right_line_window1, right_line_window2))
+
+    # Draw the lane onto the warped blank image
+    cv2.fillPoly(window_img, np.int_([left_line_pts]), (0,255, 0))
+    cv2.fillPoly(window_img, np.int_([right_line_pts]), (0,255, 0))
+    result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
+
+    return found_left, left_fit,found_right, right_fit,result,window_img
 
 
 
@@ -316,11 +338,12 @@ def pipeline_test():
         if debug == True:
             print("pipeline test  Cal Image:  {}".format(fname))
         img = cv2.imread(fname)
+        img_copy = np.copy(img)
 
 
         img  = image_camera_undistort(img)
 
-        warped = birdseye_image(img)
+        warped,M,Minv = birdseye_image(img)
 
         colour_binary,gray_binary,gray_binary_3 = line_detect(warped)
 
@@ -329,12 +352,29 @@ def pipeline_test():
         cv2.imwrite(output_imagename,colour_binary)
 
 
-        found_left, left_fit,foundr_right, right_fit,out_img = first_fit_and_polyfit(gray_binary)
+        found_left, left_fit,foundr_right, right_fit,out_img,warped_lanes = first_fit_and_polyfit(gray_binary)
+
+        output_imagename = 'output_images/histogram-first-pass-'+fname
+        print(output_imagename)
+        cv2.imwrite(output_imagename,out_img)
+
+        output_imagename = 'output_images/warped-lanes-'+fname
+        print(output_imagename)
+        cv2.imwrite(output_imagename,warped_lanes)
+
+        unwarped_lanes = cv2.warpPerspective(warped_lanes, Minv, (warped_lanes.shape[1], warped_lanes.shape[0]))
+        # Combine the result with the original campera processed image
+        result = cv2.addWeighted(img, 1, unwarped_lanes, 0.3, 0)
+
+
+        output_imagename = 'output_images/unwarped-lanes-'+fname
+        print(output_imagename)
+        cv2.imwrite(output_imagename,unwarped_lanes)
 
 
         output_imagename = 'output_images/pipeline-'+fname
         print(output_imagename)
-        cv2.imwrite(output_imagename,out_img)
+        cv2.imwrite(output_imagename,result)
 
 
 
