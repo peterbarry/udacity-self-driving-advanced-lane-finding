@@ -563,7 +563,61 @@ def video_pipeline_test():
     video_pipeline('challenge_video.mp4','challenge_video-lines-output.mp4')
     video_pipeline('harder_challenge_video.mp4','harder_challenge_video-lines-output.mp4')
 
+def images_pipeline_test():
+    files = 'test_images/*.jpg'
+    images = glob.glob(files)
+    for fname in images:
+        if debug == True:
+            print("pipeline test  Cal Image:  {}".format(fname))
+        img = cv2.imread(fname)
+        img_copy = np.copy(img)
 
 
-#pipeline
-video_pipeline_test()
+        img  = image_camera_undistort(img)
+
+        warped,M,Minv = birdseye_image(img)
+
+        colour_binary,gray_binary,gray_binary_3 = line_detect(warped)
+
+        output_imagename = 'output_images/line-detect-'+fname
+        print(output_imagename)
+        cv2.imwrite(output_imagename,colour_binary)
+
+
+        left_fit,right_fit,out_img,warped_lanes,left_curverad, right_curverad  = first_fit_and_polyfit(gray_binary)
+
+        output_imagename = 'output_images/histogram-first-pass-'+fname
+        print(output_imagename)
+        cv2.imwrite(output_imagename,out_img)
+
+        output_imagename = 'output_images/warped-lanes-'+fname
+        print(output_imagename)
+        cv2.imwrite(output_imagename,warped_lanes)
+
+        unwarped_lanes = cv2.warpPerspective(warped_lanes, Minv, (warped_lanes.shape[1], warped_lanes.shape[0]))
+        # Combine the result with the original campera processed image
+        result = cv2.addWeighted(img, 1, unwarped_lanes, 0.3, 0)
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        left_roc_text = "Roc: {0:.2f} m".format(left_curverad)
+        cv2.putText(result, left_roc_text, (20,650), font, 1, (255,255,255), 2)
+        right_roc_text = "Roc: {0:.2f} m".format(right_curverad)
+        cv2.putText(result, right_roc_text, (1000,650), font, 1, (255,255,255), 2)
+
+        output_imagename = 'output_images/unwarped-lanes-'+fname
+        print(output_imagename)
+        cv2.imwrite(output_imagename,unwarped_lanes)
+
+
+        output_imagename = 'output_images/pipeline-'+fname
+        print(output_imagename)
+        cv2.imwrite(output_imagename,result)
+
+
+run_images_pipeline = True
+run_video_pipeline = False
+
+if run_images_pipeline == True:
+    images_pipeline_test()
+if run_video_pipeline == True:
+    video_pipeline_test()
