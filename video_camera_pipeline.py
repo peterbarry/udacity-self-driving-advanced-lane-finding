@@ -1,4 +1,3 @@
-
 # This code loads the images to calibrate and generates calibration data.
 
 import numpy as np
@@ -18,16 +17,27 @@ dist_pickle = pickle.load( open( "camera_cal.p", "rb" ) )
 mtx = dist_pickle["mtx"]
 dist = dist_pickle["dist"]
 
+# Used to save some state history for the lane detection.
+# Limited state at present used.
 class LanesHistory:
-
-
-
     def __init__(self, debug_mode=False, show_plots=False):
         # Frame counter (used for finding new lanes)
         self.frame_number = 0
         self.left_fit=[0.0,0.0,0.0]
         self.right_fit=[0.0,0.0,0.0]
 
+        src = np.float32([[240,720],
+                             [600,450],
+                             [695,450],
+                             [1165,720]])
+            # Dest coords for perspective xform
+        dst = np.float32([[300,720],
+                             [300,0],
+                             [900,0],
+                             [900,720]])
+                                 # Given src and dst points, calculate the perspective transform matrix
+        self.M = cv2.getPerspectiveTransform(src, dst)
+        self.Minv = cv2.getPerspectiveTransform(dst,src )
 
     def inc_frame_counter(self):
         self.frame_number += 1
@@ -46,79 +56,36 @@ class LanesHistory:
     def get_right_fit(self):
         return self.right_fit
 
+    def get_M(self):
+            return self.M
+    def get_Minv(self):
+            return self.Minv
+
 lane_history = LanesHistory()
 
+# Use the image camera calibration to undistort camera image.
 def image_camera_undistort(img):
-    #img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    #gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) # uses BGR as loade
+
     undist = cv2.undistort(img, mtx, dist, None, mtx)
     return undist
 
-def undistort_test():
-    files = 'camera_cal/*.jpg'
-    images = glob.glob(files)
-    for fname in images:
-        if debug == True:
-            print("Undistorting Cal Image:  {}".format(fname))
-        img = cv2.imread(fname)
-        #gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) # uses BGR as loade
-        undist = image_camera_undistort(img)
-        cv2.imwrite('output_images/undistorted_images-'+fname,undist)
+
+# Create a birs eye view of the road, using cv2 Perspective Transform.
 
 def birdseye_image(img):
 
     img_size = (img.shape[1], img.shape[0])
-
-    src = np.float32([[240,720],
-                     [580,450],
-                     [720,450],
-                     [1165,720]])
-    # Dest coords for perspective xform
-    dst = np.float32([[300,720],
-                     [300,0],
-                     [900,0],
-                     [900,720]])
-
-    src = np.float32([[240,720],
-                     [600,450],
-                     [695,450],
-                     [1165,720]])
-    # Dest coords for perspective xform
-    dst = np.float32([[300,720],
-                     [300,0],
-                     [900,0],
-                     [900,720]])
-
-
-    #src = np.float32([[240,719],
-#                      [600,450],
-#                      [690,450],
-#                      [1165,719]])
-#                         # Dest coords for perspective xform
-#    dst = np.float32([[240,719],
-#                      [240,0],
-#                      [1165,0],
-#                      [1165,719]])
-
-
-    # Given src and dst points, calculate the perspective transform matrix
-    M = cv2.getPerspectiveTransform(src, dst)
-    Minv = cv2.getPerspectiveTransform(dst,src )
     # Warp the image using OpenCV warpPerspective()
-    warped = cv2.warpPerspective(img, M, img_size)
-    return warped,M,Minv
+    warped = cv2.warpPerspective(img, lane_history.get_M(), img_size)
+    return warped
+
 
 max_pixel_value=255
-
 def line_detect(img, h_thresh=(50, 60), hx_thresh=(20,100),
             s_thresh=(255, 255), sx_thresh=(20, 150),
             red_thresh=(220,255),rx_thresh_r=(20,50),
             sobel_kernel=3):
 
-#def line_detect(img, h_thresh=(50, 60), hx_thresh=(20,100),
-#            s_thresh=(200, 255), sx_thresh=(20, 50),
-#            red_thresh=(220,255),rx_thresh_r=(20,50),
-#            sobel_kernel=3):
     img = np.copy(img)
 
     R_channel = img[:,:,0]
@@ -142,19 +109,13 @@ def line_detect(img, h_thresh=(50, 60), hx_thresh=(20,100),
     r_combined_binary = np.zeros_like(rxbinary)
     r_combined_binary[(r_binary == max_pixel_value) | (rxbinary == max_pixel_value)] = max_pixel_value
 
-    #imgplot = plt.imshow(np.dstack(( r_combined_binary,
-    #        np.zeros_like(r_combined_binary),
-    #            np.zeros_like(r_combined_binary))))
-    #plt.show(imgplot)
-
-
     # Convert to HLS color space and separate the  channel
     hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HLS).astype(np.float)
-    h_channel = hsv[:,:,0]
-    l_channel = hsv[:,:,1]
+    #h_channel = hsv[:,:,0]
+    #l_channel = hsv[:,:,1]
     s_channel = hsv[:,:,2]
 
-    # Sobel x
+    # Sobel x on the S channel
     sobelx = cv2.Sobel(s_channel, cv2.CV_64F, 1, 0,ksize=sobel_kernel) # Take the derivative in x
     abs_sobelx = np.absolute(sobelx) # Absolute x derivative to accentuate lines away from horizontal
     scaled_sobel = np.uint8(255*abs_sobelx/np.max(abs_sobelx))
@@ -164,42 +125,12 @@ def line_detect(img, h_thresh=(50, 60), hx_thresh=(20,100),
     sxbinary[(scaled_sobel >= sx_thresh[0]) & (scaled_sobel <= sx_thresh[1])] = max_pixel_value # yellow
 
     # Threshold color channel
-    s_binary = np.zeros_like(s_channel)
-    s_binary[(s_channel >= s_thresh[0]) & (s_channel <= s_thresh[1])] = max_pixel_value
+    #s_binary = np.zeros_like(s_channel)
+    #s_binary[(s_channel >= s_thresh[0]) & (s_channel <= s_thresh[1])] = max_pixel_value
 
     s_combined_binary = np.zeros_like(sxbinary)
-    #s_combined_binary[(s_binary == max_pixel_value) | (sxbinary == max_pixel_value)] = max_pixel_value
-
- # did not use the s-channel just used it for sobel.
-
+    # did not use the s-channel just used it for sobel.
     s_combined_binary[(sxbinary == max_pixel_value)] = max_pixel_value
-
-    # Sobel x
-    #h_sobelx = cv2.Sobel(h_channel, cv2.CV_64F, 1, 0,ksize=sobel_kernel) # Take the derivative in x
-    #h_abs_sobelx = np.absolute(h_sobelx) # Absolute x derivative to accentuate lines away from horizontal
-    #h_scaled_sobel = np.uint8(255*h_abs_sobelx/np.max(h_abs_sobelx))
-
-    # Threshold x gradient
-    #hxbinary = np.zeros_like(h_scaled_sobel)
-    #hxbinary[(h_scaled_sobel >= hx_thresh[0]) & (h_scaled_sobel <= hx_thresh[1])] = max_pixel_value
-
-    # Threshold color channel
-    #h_binary = np.zeros_like(h_channel)
-    #h_binary[(h_channel >= h_thresh[0]) & (h_channel <= h_thresh[1])] = max_pixel_value
-
-    #h_combined_binary = np.zeros_like(sxbinary)
-    #h_combined_binary[(h_binary == 1) | (hxbinary == 1)] = max_pixel_value
-
-
-    # Stack each channel
-    # Note color_binary[:, :, 0] is all 0s, effectively an all black image. It might
-    # be beneficial to replace this channel with something else.
-    #color_binary = np.dstack(( r_combined_binary, s_combined_binary, h_combined_binary))
-
-
-    #color_binary = np.dstack(( r_binary_r, sxbinary, s_binary))
-
-    #color_binary = np.dstack(( r_combined_binary, h_binary, s_binary))
 
     color_binary = np.dstack(( np.zeros_like(r_combined_binary),r_combined_binary, s_combined_binary, ))
     gray = cv2.cvtColor(color_binary, cv2.COLOR_RGB2GRAY)
@@ -214,19 +145,14 @@ def line_detect(img, h_thresh=(50, 60), hx_thresh=(20,100),
     #gray_binary_3 = np.dstack((gray_binary,gray_binary,gray_binary))
     gray_binary_3 = np.dstack((gray_binary,zeros_fill,zeros_fill))
 
-
+    # return a number of stacked results for debug and visualisation - gray_binary used for fitting.
     return color_binary,gray_binary,gray_binary_3
 
 
 
 def first_fit_and_polyfit(binary_img):
 
-    #out_img = np.copy(binary_img)
-    #gray = img[:,:,0]
-    #binary_warped = np.zeros_like(gray)
-    #print(binary_warped.shape)
-    #binary_warped[(gray > 0) ] = 255
-
+# First time fitting - do exhaustive search.
 
     binary_warped=binary_img
 
@@ -245,16 +171,6 @@ def first_fit_and_polyfit(binary_img):
     midpoint = np.int(histogram.shape[0]//2)
     leftx_base = np.argmax(histogram[:midpoint])
     rightx_base = np.argmax(histogram[midpoint:]) + midpoint
-
-    #print('Midpoint')
-    #print(midpoint)
-    #print('Left Base')
-    #print (leftx_base)
-    #print('Right Base')
-    #print (rightx_base)
-
-    #print('histogram')
-    #print(histogram.size)
 
     # Choose the number of sliding windows
     nwindows = 9
@@ -312,18 +228,10 @@ def first_fit_and_polyfit(binary_img):
     rightx = nonzerox[right_lane_inds]
     righty = nonzeroy[right_lane_inds]
 
-    #print('run polly on')
-    #print(lefty)
-    #print(leftx)
-    #print(righty)
-    #print(rightx)
-
 
     if len(leftx) != 0:
         found_left = True
         left_fit = np.polyfit(lefty, leftx, 2)
-        #print ('Left lane detected')
-        #print(left_fit)
     else:
         found_left = False
         left_fit=[0,0,0]
@@ -332,8 +240,6 @@ def first_fit_and_polyfit(binary_img):
     if len(rightx) != 0:
         found_right = True
         right_fit = np.polyfit(righty, rightx, 2)
-        #print ('Right lane detected')
-        #print(right_fit)
     else:
         found_right = False
         right_fit=[0,0,0]
@@ -345,25 +251,19 @@ def first_fit_and_polyfit(binary_img):
     #print(y_eval)
     left_curverad = ((1 + (2*left_fit[0]*y_eval + left_fit[1])**2)**1.5) / np.absolute(2*left_fit[0])
     right_curverad = ((1 + (2*right_fit[0]*y_eval + right_fit[1])**2)**1.5) / np.absolute(2*right_fit[0])
-    #print(left_curverad, right_curverad)
-
-    # Define conversions in x and y from pixels space to meters
-    #ym_per_pix = 30/720 # meters per pixel in y dimension
-    #xm_per_pix = 3.7/700 # meters per pixel in x dimension
+            # Define conversions in x and y from pixels space to meters
+    ym_per_pix = 30/720 # meters per pixel in y dimension
+    xm_per_pix = 3.7/700 # meters per pixel in x dimension
 
     # Fit new polynomials to x,y in world space
-    #left_fit_cr = np.polyfit(ploty*ym_per_pix, leftx*xm_per_pix, 2)
-    #right_fit_cr = np.polyfit(ploty*ym_per_pix, rightx*xm_per_pix, 2)
-    # Calculate the new radii of curvature
-    #left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
-    #right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
-    # Now our radius of curvature is in meters
-    #print(left_curverad, 'm', right_curverad, 'm')
-
-
+    left_fit_cr = np.polyfit(lefty*ym_per_pix, leftx*xm_per_pix, 2)
+    right_fit_cr = np.polyfit(righty*ym_per_pix, rightx*xm_per_pix, 2)
+            # Calculate the new radii of curvature
+    left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
+    right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
 
     # Generate x and y values for plotting
-    ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
+    ploty = np.linspace(200, binary_warped.shape[0]-1, binary_warped.shape[0] )
     if found_left == True:
         left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
     if found_right == True:
@@ -375,8 +275,7 @@ def first_fit_and_polyfit(binary_img):
     window_img = np.zeros_like(out_img)
     # Color in left and right line pixels
 
-
-    # Generate a polygon to illustrate the search window area
+    # Generate a polygon
     # And recast the x and y points into usable format for cv2.fillPoly()
     margin = 10
     left_line_window1 = np.array([np.transpose(np.vstack([left_fitx-margin, ploty]))])
@@ -398,9 +297,21 @@ def first_fit_and_polyfit(binary_img):
 
     result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
 
-    return  left_fit,right_fit,result,window_img,left_curverad, right_curverad
+    #wraped  space mid point variation calculate
+    lx = left_fitx[-1]
+    rx = right_fitx[-1]
+    mid = ((rx-lx)/2)+lx
+    lane_width_pix = rx-lx
+    image_mid = binary_warped.shape[1]/2
+    lane_cms_per_pixel = 370.0 / lane_width_pix   # US  lane width = 3.7m
+    dist_from_mid = ((mid - image_mid) * lane_cms_per_pixel)+46 #manual caibrated for warp offsets
+
+    return  left_fit,right_fit,result,window_img,left_curverad, right_curverad,dist_from_mid
 
 def subsequent_fit_and_polyfit(binary_img,left_fit,right_fit):
+
+# optimsed search using previous polyfit.
+
 
     binary_warped=binary_img
 
@@ -433,24 +344,24 @@ def subsequent_fit_and_polyfit(binary_img,left_fit,right_fit):
         #print(y_eval)
     left_curverad = ((1 + (2*left_fit[0]*y_eval + left_fit[1])**2)**1.5) / np.absolute(2*left_fit[0])
     right_curverad = ((1 + (2*right_fit[0]*y_eval + right_fit[1])**2)**1.5) / np.absolute(2*right_fit[0])
-    print(left_curverad, right_curverad)
 
-        # Define conversions in x and y from pixels space to meters
+            # Define conversions in x and y from pixels space to meters
     ym_per_pix = 30/720 # meters per pixel in y dimension
     xm_per_pix = 3.7/700 # meters per pixel in x dimension
 
-        # Fit new polynomials to x,y in world space
+            # Fit new polynomials to x,y in world space
     left_fit_cr = np.polyfit(lefty*ym_per_pix, leftx*xm_per_pix, 2)
     right_fit_cr = np.polyfit(righty*ym_per_pix, rightx*xm_per_pix, 2)
-        # Calculate the new radii of curvature
+            # Calculate the new radii of curvature
     left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
     right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
-        # Now our radius of curvature is in meters
-    print(left_curverad, 'm', right_curverad, 'm')
-
 
     # Generate x and y values for plotting
-    ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
+
+    #Dont start plot at top of warped iamge.
+    ploty = np.linspace(200, binary_warped.shape[0]-1, binary_warped.shape[0] )
+
+
     left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
     right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
 
@@ -461,7 +372,7 @@ def subsequent_fit_and_polyfit(binary_img,left_fit,right_fit):
     # Color in left and right line pixels
 
 
-    # Generate a polygon to illustrate the search window area
+    #
     # And recast the x and y points into usable format for cv2.fillPoly()
     margin = 10
     left_line_window1 = np.array([np.transpose(np.vstack([left_fitx-margin, ploty]))])
@@ -483,53 +394,43 @@ def subsequent_fit_and_polyfit(binary_img,left_fit,right_fit):
 
     result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
 
+    #wapred space mid point variation calculate
+    lx = left_fitx[-1]
+    rx = right_fitx[-1]
+    mid = ((rx-lx)/2)+lx
+    lane_width_pix = rx-lx
+    image_mid = binary_warped.shape[1]/2
+    lane_cms_per_pixel = 370.0 / lane_width_pix   # US  lane width = 3.7m
+    dist_from_mid = ((mid - image_mid) * lane_cms_per_pixel)+46 #manual caibrated for warp offsets
 
-    return left_fit ,right_fit,result,window_img,left_curverad, right_curverad
+    return left_fit ,right_fit,result,window_img,left_curverad, right_curverad,dist_from_mid
 
 def process_img(img):
 
             img_copy = np.copy(img)
             lane_history.inc_frame_counter()
-
-            #frame_counter=lane_history.get_frame_counter()
-            #if frame_counter < 850 :
-            #    return img
-
+            Minv = lane_history.get_Minv()
 
             img  = image_camera_undistort(img)
 
-            warped,M,Minv = birdseye_image(img)
+            warped = birdseye_image(img)
 
             colour_binary,gray_binary,gray_binary_3 = line_detect(warped)
 
-            #output_imagename = 'output_images/line-detect-'+fname
-            #print(output_imagename)
-            #cv2.imwrite(output_imagename,colour_binary)
-
-            #add line detection overlay
+            #add line detection overlay - debug
             #colour_binary_unwarped = cv2.warpPerspective(colour_binary, Minv, (colour_binary.shape[1], colour_binary.shape[0]))
             #img = cv2.addWeighted(img, 1, colour_binary_unwarped, 0.7, 0)
 
-
             if lane_history.get_frame_counter() == 1 :
-                left_fit,right_fit,out_img,warped_lanes,left_curverad, right_curverad = first_fit_and_polyfit(gray_binary)
+                left_fit,right_fit,out_img,warped_lanes,left_curverad, right_curverad,dist_from_mid = first_fit_and_polyfit(gray_binary)
                 lane_history.set_left_fit(left_fit)
                 lane_history.set_right_fit(right_fit)
             else:
                 left_fit = lane_history.get_left_fit()
                 right_fit = lane_history.get_right_fit()
-                left_fit,right_fit,out_img,warped_lanes,left_curverad, right_curverad = subsequent_fit_and_polyfit(gray_binary,left_fit,right_fit)
+                left_fit,right_fit,out_img,warped_lanes,left_curverad, right_curverad,dist_from_mid = subsequent_fit_and_polyfit(gray_binary,left_fit,right_fit)
                 lane_history.set_left_fit(left_fit)
                 lane_history.set_right_fit(right_fit)
-
-
-            #output_imagename = 'output_images/histogram-first-pass-'+fname
-            #print(output_imagename)
-            #cv2.imwrite(output_imagename,out_img)
-
-            #output_imagename = 'output_images/warped-lanes-'+fname
-            #print(output_imagename)
-            #cv2.imwrite(output_imagename,warped_lanes)
 
             unwarped_lanes = cv2.warpPerspective(warped_lanes, Minv, (warped_lanes.shape[1], warped_lanes.shape[0]))
             # Combine the result with the original campera processed image
@@ -537,17 +438,18 @@ def process_img(img):
             #result = img
 
             font = cv2.FONT_HERSHEY_SIMPLEX
+
+            dist_str = "Distance from Center: {0:.2f} cms".format(dist_from_mid)
+                #print(dist_str)
+            cv2.putText(result, dist_str, (200,50), font, 1, (255,255,255), 2)
+
             left_roc_text = "Roc: {0:.2f} m".format(left_curverad)
             cv2.putText(result, left_roc_text, (20,650), font, 1, (255,255,255), 2)
             right_roc_text = "Roc: {0:.2f} m".format(right_curverad)
             cv2.putText(result, right_roc_text, (1000,650), font, 1, (255,255,255), 2)
 
-            frame_counter_str = "Frame #: {0:2d} ".format(lane_history.get_frame_counter())
-            cv2.putText(result, frame_counter_str, (1000,350), font, 1, (255,0,0), 2)
-
-            #output_imagename = 'output_images/unwarped-lanes-'+fname
-            #print(output_imagename)
-            #cv2.imwrite(output_imagename,unwarped_lanes)
+            frame_counter_str = "Frame #: {0:2d}".format(lane_history.get_frame_counter())
+            cv2.putText(result, frame_counter_str, (1000,50), font, 1, (255,0,0), 2)
 
             return result
 
@@ -575,7 +477,9 @@ def images_pipeline_test():
 
         img  = image_camera_undistort(img)
 
-        warped,M,Minv = birdseye_image(img)
+        warped = birdseye_image(img)
+        Minv = lane_history.get_Minv()
+
 
         colour_binary,gray_binary,gray_binary_3 = line_detect(warped)
 
@@ -584,7 +488,9 @@ def images_pipeline_test():
         cv2.imwrite(output_imagename,colour_binary)
 
 
-        left_fit,right_fit,out_img,warped_lanes,left_curverad, right_curverad  = first_fit_and_polyfit(gray_binary)
+        left_fit,right_fit,out_img,warped_lanes,left_curverad, right_curverad,dist_from_mid  = first_fit_and_polyfit(gray_binary)
+
+
 
         output_imagename = 'output_images/histogram-first-pass-'+fname
         print(output_imagename)
@@ -599,6 +505,11 @@ def images_pipeline_test():
         result = cv2.addWeighted(img, 1, unwarped_lanes, 0.3, 0)
 
         font = cv2.FONT_HERSHEY_SIMPLEX
+
+        dist_str = "Distance from Center: {0:.2f} cms".format(dist_from_mid)
+        #print(dist_str)
+        cv2.putText(result, dist_str, (200,50), font, 1, (255,255,255), 2)
+
         left_roc_text = "Roc: {0:.2f} m".format(left_curverad)
         cv2.putText(result, left_roc_text, (20,650), font, 1, (255,255,255), 2)
         right_roc_text = "Roc: {0:.2f} m".format(right_curverad)
@@ -615,7 +526,7 @@ def images_pipeline_test():
 
 
 run_images_pipeline = True
-run_video_pipeline = False
+run_video_pipeline = True
 
 if run_images_pipeline == True:
     images_pipeline_test()
